@@ -67,7 +67,7 @@ def my_hook(d):
         print('Finished downloading.')
 
 
-def runYTDL(ID):
+def runYTDL(ID, filepath):
     ydl_opts = {
         'add-metadata' : '',
         'writeinfojson' : '',
@@ -77,7 +77,7 @@ def runYTDL(ID):
         'continue': '',
         'ignoreerrors': '',
         'nooverwrites': '',
-        'outtmpl': '/mnt/mofumofu/V-Tubers/[%(upload_date)s][%(id)s] %(title)s/[%(uploader)s] %(title)s.%(ext)s',
+        'outtmpl': filepath,
         'logger': YTDLLogger(),
         'progress_hooks': [my_hook],
     }
@@ -216,14 +216,17 @@ def archive_streams(stream_list):
 
 def parse_command_line(channels):
     parser = argparse.ArgumentParser(description='Python script for monitoring a VTuber\'s channel and automatically downloading videos when they go live.')
+    parser.add_argument('-o', '--output', help='File path output for youtube-dl')    
     required_args = parser.add_argument_group('required arguments')
-    required_args.add_argument('-c', '--channel', help='VTuber\'s English name, case insensitive. (ex: Ookami Mio, Shirakami Fubuki, etc.)', required=True)
+    required_args.add_argument('-c', '--channel', help='VTuber\'s English first name, case insensitive. (ex: Mio, Fubuki, etc.)', required=True)
 
     args = vars(parser.parse_args())
 
     if args['channel'] == None:
         print('chuubas.py -c <English channel name>')
         sys.exit(2)
+    if args['output'] is not None:
+        output_path = args['output']
 
     input_val = args['channel'].lower()
     if input_val in channels["holodex_supported"].keys():
@@ -244,18 +247,7 @@ def main(argv):
     # TODO: Add support for several videos
     # TODO: Sort videos by time and start with video with shortest remaining time to start
     # TODO: Add handling for members-only videos (command line flag with yt-dl config)
-    # TODO: Move to config files for yt-dl
-
-    # holoapi = requests.get("https://holodex.net/api/v2/live")
-    # print(holoapi.status_code)
-
-    # channels = requests.get("https://holodex.net/api/v2/channels", params=channels_parameters)
-    # print(channels.status_code)
-    # print(json.dumps(channels.json(), indent=4))
-
-    # live = requests.get("https://holodex.net/api/v2/live", params=live_params)
-    # print(live.status_code)
-    # print(json.dumps(live.json(), indent=4))
+    # TODO: Move to config files for yt-dl (not possible)
 
     signal.signal(signal.SIGINT, signal_handler)
 
