@@ -14,6 +14,7 @@ import os
 import googleapiclient.discovery
 import youtube_dl
 import subprocess
+import operator
 from os import error, name
 from datetime import datetime
 from pytz import timezone, utc
@@ -67,7 +68,7 @@ def my_hook(d):
         print('Finished downloading.')
 
 
-def runYTDL(ID, filepath):
+def runYTDL(ID):
     ydl_opts = {
         'add-metadata' : '',
         'writeinfojson' : '',
@@ -77,7 +78,7 @@ def runYTDL(ID, filepath):
         'continue': '',
         'ignoreerrors': '',
         'nooverwrites': '',
-        'outtmpl': filepath,
+        'outtmpl': '/mnt/mofumofu/V-Tubers/[%(upload_date)s][%(id)s] %(title)s/[%(uploader)s] %(title)s.%(ext)s',
         'logger': YTDLLogger(),
         'progress_hooks': [my_hook],
     }
@@ -168,6 +169,31 @@ def generic_search(youtube_api_key):
         time.sleep(10)
 
 
+def sort_by_time(stream_list):
+    # Master timestamp
+    utcmoment_naive = datetime.utcnow()
+    utcmoment = utcmoment_naive.replace(tzinfo=pytz.utc)
+
+    # Create dict with id and duration till start
+    temp = dict()
+    idx = 0
+    for stream in stream_list:
+        start_date = iso8601.parse_date(stream["start_scheduled"])
+        seconds_remaining = (start_date - utcmoment).total_seconds()
+        temp[idx] = seconds_remaining
+        idx = idx + 1
+
+    # Sort dict
+    temp_sorted = dict(sorted(temp.items(), key=lambda item: item[1]))
+    
+    # Reconstruct dictionary and return
+    final_list = []
+    final_keys = temp_sorted.keys()
+    for val in final_keys:
+        final_list.append(stream_list[val])
+    return final_list
+
+
 def search_for_streams(api_params, holodex_api_key):
     streams_to_archive = []
 
@@ -178,17 +204,24 @@ def search_for_streams(api_params, holodex_api_key):
         # jprint(users_live)
 
         if len(users_live) > 0:
+            # Keep terminal pretty
+            print("")
+
+            # Sort stream list
+            users_live = sort_by_time(users_live)
+
+            # Parse stream list
             for video in users_live:
                 if not re.search(r'\bfree chat\b', video["title"], re.I):
-                    print("\nFound stream: {} - {}".format(video["title"], video["id"]))
+                    print("Found stream: {} - {}".format(video["title"], video["id"]))
                     if video["status"] == "upcoming" or video["status"] == "live":
-                        if len(streams_to_archive) == 0:
+                        # if len(streams_to_archive) == 0:
                             stream = (video["id"], video["start_scheduled"])
-                            # print(stream)
                             streams_to_archive.append(stream)
-                            running = 0
-                            return streams_to_archive
-        time.sleep(60)
+            running = 0
+        else:
+            time.sleep(60)
+    # print(streams_to_archive)
     return streams_to_archive
 
 
@@ -197,21 +230,24 @@ def archive_streams(stream_list):
     while(running):
         difference = 0
         for stream in stream_list:
-            start_date = iso8601.parse_date(stream[1])
-            utcmoment_naive = datetime.utcnow()
-            utcmoment = utcmoment_naive.replace(tzinfo=pytz.utc)
-            difference = start_date - utcmoment
-            seconds_remaining = difference.total_seconds()
-            print("\rTime until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]), end='')
-            # seconds_remaining = -10
-            if seconds_remaining < (60*5):
-                if runYTDL(stream[0]):
-                    print("ytdl passed")
-                    running = 0
+            run_inner = 1
+            while (run_inner):
+                start_date = iso8601.parse_date(stream[1])
+                utcmoment_naive = datetime.utcnow()
+                utcmoment = utcmoment_naive.replace(tzinfo=pytz.utc)
+                difference = start_date - utcmoment
+                seconds_remaining = difference.total_seconds()
+                print("\rTime until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]), end='')
+                # seconds_remaining = -10
+                if seconds_remaining < (60*5):
+                    if runYTDL(stream[0]):
+                        print("ytdl passed")
+                        run_inner = 0
+                    else:
+                        print("ytdl failed")
                 else:
-                    print("ytdl failed")
-            else:
-                time.sleep(1)
+                    time.sleep(1)
+        running = 0       
 
 
 def parse_command_line(channels):
@@ -278,6 +314,7 @@ def main(argv):
             stream_list = search_for_streams(single_user_live_params, api_keys['Holodex'])
             # stream_list = [('xH5k29Boh7c', '2021-06-11T13:00:00.000Z')]
             archive_streams(stream_list)
+            sys.exit(0)
     elif channel_id == channel_ids["youtube_only"].values():
         while(True):
             stream_list = generic_search(api_keys['YouTube'])
