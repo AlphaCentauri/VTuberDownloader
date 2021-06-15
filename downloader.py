@@ -244,6 +244,7 @@ def main(argv):
     # TODO: Add support for several videos
     # TODO: Sort videos by time and start with video with shortest remaining time to start
     # TODO: Add handling for members-only videos (command line flag with yt-dl config)
+    # TODO: Move to config files for yt-dl
 
     # holoapi = requests.get("https://holodex.net/api/v2/live")
     # print(holoapi.status_code)
@@ -258,11 +259,19 @@ def main(argv):
 
     signal.signal(signal.SIGINT, signal_handler)
 
-    with open('API_KEYS.json') as f:
-        api_keys = json.load(f)
+    try:
+        with open('API_KEYS.json') as f:
+            api_keys = json.load(f)
+    except Exception as e:
+        print("Error reading API keys JSON file...does it exist? Are you running inside project directory?")
+        sys.exit(2)
 
-    with open('vtubers.json') as f:
-        channel_ids = json.load(f)
+    try:
+        with open('vtubers.json') as f:
+            channel_ids = json.load(f)
+    except Exception as e:
+        print("Error reading VTubers JSON file...are you running inside project directory?")
+        sys.exit(2)
 
     channel_id = parse_command_line(channel_ids)
 
