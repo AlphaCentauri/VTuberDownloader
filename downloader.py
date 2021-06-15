@@ -68,7 +68,7 @@ def my_hook(d):
         print('Finished downloading.')
 
 
-def runYTDL(ID):
+def runYTDL(ID, path):
     ydl_opts = {
         'add-metadata' : '',
         'writeinfojson' : '',
@@ -78,7 +78,7 @@ def runYTDL(ID):
         'continue': '',
         'ignoreerrors': '',
         'nooverwrites': '',
-        'outtmpl': '/mnt/mofumofu/V-Tubers/[%(upload_date)s][%(id)s] %(title)s/[%(uploader)s] %(title)s.%(ext)s',
+        'outtmpl': path,
         'logger': YTDLLogger(),
         'progress_hooks': [my_hook],
     }
@@ -90,27 +90,6 @@ def runYTDL(ID):
             print(e)
             return False
     return True
-
-    # print("")
-    # try:
-    #     '''
-    #     youtube-dl https://www.youtube.com/channel/UCp-5t9SrOQwXMU7iIjQfARg 
-    #     --add-metadata 
-    #     --write-info-json 
-    #     --write-thumbnail 
-    #     --write-description 
-    #     --download-archive "/mnt/mofumofu/V-Tubers/ホロライブ/Members/HoloJP/大神ミオ/Public_Archive/public.archive" 
-    #     -ciw 
-    #     -f bestvideo[ext=mp4]+bestaudio[ext=m4a] 
-    #     --merge-output-format mp4 
-    #     -o "/mnt/mofumofu/V-Tubers/ホロライブ/Members/HoloJP/大神ミオ/Public_Archive/[%(upload_date)s] %(title)s/[%(uploader)s][%(upload_date)s] %(title)s (%(id)s).%(ext)s"
-    #     '''
-    #     subprocess.check_output(['youtube-dl', 'https://www.youtube.com/watch?v={}'.format(ID)])
-    #     return True
-    # except subprocess.CalledProcessError as e:
-    #     # print("ERROR CAUGHT")
-    #     print(e)
-    #     return False
 
 
 def generic_search(youtube_api_key):
@@ -248,7 +227,7 @@ def archive_streams(stream_list, path):
                 print("\rTime until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]), end='')
                 # seconds_remaining = -10
                 if seconds_remaining < (60*5):
-                    if runYTDL(stream[0]):
+                    if runYTDL(stream[0], path):
                         print("ytdl passed")
                         run_inner = 0
                     else:
@@ -331,7 +310,6 @@ def main(argv):
             stream_list = search_for_streams(single_user_live_params, api_keys['Holodex'])
             # stream_list = [('xH5k29Boh7c', '2021-06-11T13:00:00.000Z')]
             archive_streams(stream_list, output_path)
-            # sys.exit(0)
     elif channel_id == channel_ids["youtube_only"].values():
         while(True):
             stream_list = generic_search(api_keys['YouTube'])
