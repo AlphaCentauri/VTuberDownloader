@@ -204,20 +204,21 @@ def search_for_streams(api_params, holodex_api_key):
         # jprint(users_live)
 
         if len(users_live) > 0:
-            # Keep terminal pretty
-            print("")
-
             # Sort stream list
             users_live = sort_by_time(users_live)
 
             # Parse stream list
             for video in users_live:
+                # TODO: This will not catch all free chat titles, maybe default to checking start_scheduled time and if it's stupid huge, ignore stream
                 if not re.search(r'\bfree chat\b', video["title"], re.I):
-                    print("Found stream: {} - {}".format(video["title"], video["id"]))
+                    # Keep terminal pretty
+                    print("\nFound stream: {} - {}".format(video["title"], video["id"]), end="")
                     if video["status"] == "upcoming" or video["status"] == "live":
                         # if len(streams_to_archive) == 0:
                             stream = (video["id"], video["start_scheduled"])
                             streams_to_archive.append(stream)
+
+        if len(streams_to_archive) > 0:
             running = 0
         else:
             time.sleep(60)
@@ -225,7 +226,14 @@ def search_for_streams(api_params, holodex_api_key):
     return streams_to_archive
 
 
-def archive_streams(stream_list):
+def archive_streams(stream_list, path):
+    # Keep terminal pretty
+    print("")
+
+    # TODO: Add template arguments to default path
+    if path == None:
+        path = "./"
+
     running = 1
     while(running):
         difference = 0
@@ -251,6 +259,7 @@ def archive_streams(stream_list):
 
 
 def parse_command_line(channels):
+    arguments = dict()
     parser = argparse.ArgumentParser(description='Python script for monitoring a VTuber\'s channel and automatically downloading videos when they go live.')
     parser.add_argument('-o', '--output', help='File path output for youtube-dl')    
     required_args = parser.add_argument_group('required arguments')
@@ -262,16 +271,20 @@ def parse_command_line(channels):
         print('chuubas.py -c <English channel name>')
         sys.exit(2)
     if args['output'] is not None:
-        output_path = args['output']
+        arguments['output'] = args['output']
+    else:
+        arguments['output'] = None
 
     input_val = args['channel'].lower()
     if input_val in channels["holodex_supported"].keys():
-        return channels["holodex_supported"][input_val]
+        arguments['channel_id'] = channels["holodex_supported"][input_val]
     elif input_val in channels["youtube_only"].keys():
-        return channels["youtube_only"][input_val]
+        arguments['channel_id'] = channels["youtube_only"][input_val]
     else:
         print('chuubas.py -c <English channel name>')
         sys.exit(2)
+
+    return arguments
 
 
 def signal_handler(sig, frame):
@@ -280,10 +293,11 @@ def signal_handler(sig, frame):
 
 
 def main(argv):
-    # TODO: Add support for several videos
-    # TODO: Sort videos by time and start with video with shortest remaining time to start
+    # TODO: Add support for several videos ***(DONE)
+    # TODO: Sort videos by time and start with video with shortest remaining time to start ***(DONE)
     # TODO: Add handling for members-only videos (command line flag with yt-dl config)
-    # TODO: Move to config files for yt-dl (not possible)
+    # TODO: Move to config files for yt-dl ***(NOT POSSIBLE)
+    # TODO: Figure out why yt-dl doesn't actually download thumbnail, desc., etc.; only grabbing video stream atm
 
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -301,7 +315,9 @@ def main(argv):
         print("Error reading VTubers JSON file...are you running inside project directory?")
         sys.exit(2)
 
-    channel_id = parse_command_line(channel_ids)
+    arguments = parse_command_line(channel_ids)
+    channel_id = arguments['channel_id']
+    output_path = arguments['output']
 
     print("======< The sun never sets on the VTuber Empire >======")
 
@@ -309,17 +325,18 @@ def main(argv):
         "channels": "{}".format(channel_id)
     }
 
+    # TODO: Redundany check on supported channel list, try to only handle this in arg parser
     if channel_id in channel_ids["holodex_supported"].values():
         while (True):
             stream_list = search_for_streams(single_user_live_params, api_keys['Holodex'])
             # stream_list = [('xH5k29Boh7c', '2021-06-11T13:00:00.000Z')]
-            archive_streams(stream_list)
-            sys.exit(0)
+            archive_streams(stream_list, output_path)
+            # sys.exit(0)
     elif channel_id == channel_ids["youtube_only"].values():
         while(True):
             stream_list = generic_search(api_keys['YouTube'])
             # stream = [('Yon4aCYJVhw', '2021-06-11T13:00:00.000Z')]
-            archive_streams(stream_list)
+            archive_streams(stream_list, output_path)
     else:
         sys.exit('INVALID CHANNEL ID!')
 
