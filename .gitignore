@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+### VS Code files ###
+.vscode/
+
+### PROJECT SPECIFIC FILES ###
+API_KEYS.json
