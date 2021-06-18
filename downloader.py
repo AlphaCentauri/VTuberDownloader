@@ -37,6 +37,12 @@ class YTDLLogger(object):
         print(msg)
 
 
+def datetime_from_utc_to_local(utc_datetime):
+    now_timestamp = time.time()
+    offset = datetime.fromtimestamp(now_timestamp) - datetime.utcfromtimestamp(now_timestamp)
+    return utc_datetime + offset
+
+
 def jprint(obj):
     # create a formatted string of the Python JSON object
     text = json.dumps(obj, sort_keys=False, indent=4)
@@ -129,10 +135,9 @@ def generic_search(channel_id, youtube_api_key, email_config):
                     # Convert time
                     format = "%H:%M:%S"
                     tmptime = iso8601.parse_date(scheduled_start_time)
-                    now_est = tmptime.astimezone(timezone('EST'))
-                    FIXTHIS = timedelta(hours=1)
+                    local_time = datetime_from_utc_to_local(tmptime)
                     time_delta = timedelta(minutes=15)
-                    alarm_time = now_est - time_delta + FIXTHIS
+                    alarm_time = local_time - time_delta
 
                     # Setup email
                     port = 465  # For SSL
@@ -145,7 +150,7 @@ def generic_search(channel_id, youtube_api_key, email_config):
                         alarm_time.hour,
                         alarm_time.minute,
                         "Rurufu",
-                        now_est.strftime(format)
+                        local_time.strftime(format)
                     )
 
                     # Send email
@@ -218,9 +223,9 @@ def search_for_streams(api_params, holodex_api_key, email_config):
                             # Convert time
                             format = "%H:%M:%S"
                             tmptime = iso8601.parse_date(video["start_scheduled"])
-                            now_est = tmptime.astimezone(timezone('EST'))
+                            local_time = datetime_from_utc_to_local(tmptime)
                             time_delta = timedelta(minutes=15)
-                            alarm_time = now_est - time_delta
+                            alarm_time = local_time - time_delta
 
                             # Setup email
                             port = 465  # For SSL
@@ -232,7 +237,7 @@ def search_for_streams(api_params, holodex_api_key, email_config):
                                 alarm_time.hour,
                                 alarm_time.minute,
                                 video["channel"]["english_name"],
-                                now_est.strftime(format)
+                                local_time.strftime(format)
                             )
 
                             # Send email
@@ -324,6 +329,7 @@ def main(argv):
     # TODO: Move to config files for yt-dl ***(NOT POSSIBLE)
     # TODO: Figure out why yt-dl doesn't actually download thumbnail, desc., etc.; only grabbing video stream atm
     # TODO: Multi threading to free up thread to keep checking for videos
+    # TODO: Fix DST handling
 
     signal.signal(signal.SIGINT, signal_handler)
 
