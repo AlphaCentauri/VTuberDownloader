@@ -22,29 +22,8 @@ from pytz import timezone, utc
 from bs4 import BeautifulSoup
 from types import SimpleNamespace
 
-HOLOMEM_EN_NAMES = ['AZKi', 'Akai Haato', 'Usada Pekora', 'Minato Aqua', 'Yuzuki Choco', 'Tokoyami Towa', 'Hoshimachi Suisei',
-                    'Hanasaki Miyabi', 'Anya Melfissa', 'Nakiri Ayame', 'Rikkaroid', 'Himemori Luna', 'Yukoku Roberu', 'Airani Iofifteen',
-                    'Momosuzu Nene', 'Houshou Marine', 'Yozora Mel', 'Shirakami Fubuki', 'Roboco-san', 'Shirogane Noel', 'Kagami Kira',
-                    'Yukihana Lamy', 'Hololive Indonesia', 'Aki Rosenthal', 'Kishido Temma', 'Civia', 'Mano Aloe', 'Inugami Korone',
-                    'Pavolia Reine', 'Akai Haato (Sub)', 'Sakura Miko', 'Kageyama Shien', 'Takanashi Kiara', 'Hololive VTuber Group',
-                    'Omaru Polka', 'Arurandeisu', 'Aki Rosenthal (Sub)', 'Uruha Rushia', 'Mori Calliope', 'Ninomae Ina’nis', 'Astel Leda',
-                    'Gawr Gura', 'Hololive English', 'Ayunda Risu', 'Moona Hoshinova', 'Choco Sub Channel', 'Ookami Mio', 'Tokino Sora',
-                    'Natsuiro Matsuri', 'Tsunomaki Watame', 'Kiryu Coco', 'Tsukishita Kaoru', 'Shishiro Botan', 'Nekomata Okayu', 'Shiranui Flare',
-                    'Oozora Subaru', 'Aragami Oga', 'Holostars Official', 'Murasaki Shion', 'Watson Amelia', 'Kureiji Ollie', 'Kanade Izuru', 'Amane Kanata']
 
 MASTER_LIVE_URL = "https://www.youtube.com/channel/{}/live"
-
-# Channel IDs
-MIO_ID = "UCp-5t9SrOQwXMU7iIjQfARg"
-FUBUKI_ID = "UCdn5BQ06XqgXoAxIhbqw5Rg"
-COCO_ID = "UCS9uQI-jC3DE0L4IpXyvr6w"
-INA_ID = "UCMwGHR0BTZuLsmjY_NT5Pwg"
-RURUFU_ID = "UCcQsDietWkYakBKbGpCaeLA"
-BOTAN_ID = "UCUKD-uaobj9jiqB-VXt71mA"
-ROBERU_ID = "UCANDOlYTJT7N5jlRC3zfzVA"
-KIARA_ID = "UCHsx4Hqa-1ORjQTh9TYDhww"
-LAMY_ID = "UCFKOVgVbGmX65RxO3EtH3iw"
-NOEL_ID = "UCdyqAaZDKHXg4Ahi7VENThQ"
 
 
 class YTDLLogger(object):
@@ -93,7 +72,7 @@ def runYTDL(ID, path):
     return True
 
 
-def generic_search(youtube_api_key, email_config):
+def generic_search(channel_id, youtube_api_key, email_config):
     # TODO: Generic search doesn't support multiple videos, try to fix that
 
     streams_to_archive = []
@@ -104,7 +83,7 @@ def generic_search(youtube_api_key, email_config):
         # Live parsing
         try:
             # Get soup
-            page = requests.get(MASTER_LIVE_URL.format(RURUFU_ID))
+            page = requests.get(MASTER_LIVE_URL.format(channel_id))
             soup = BeautifulSoup(page.content, 'html.parser')
 
             # Scrape page
@@ -119,7 +98,7 @@ def generic_search(youtube_api_key, email_config):
             # print("\nFound: {}".format(video_id))
 
             # YouTube API call from found video_id
-            os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+            # os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
             DEVELOPER_KEY = youtube_api_key
             api_service_name = "youtube"
             api_version = "v3"
@@ -389,7 +368,7 @@ def main(argv):
             archive_streams(stream_list, output_path)
     elif channel_id in channel_ids["youtube_only"].values():
         while(True):
-            stream_list = generic_search(api_keys['YouTube'], email_config)
+            stream_list = generic_search(channel_id, api_keys['YouTube'], email_config)
             # stream = [('Yon4aCYJVhw', '2021-06-11T13:00:00.000Z')]
             archive_streams(stream_list, output_path)
     else:
