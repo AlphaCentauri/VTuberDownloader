@@ -133,3 +133,4 @@ dmypy.json
 
 ### PROJECT SPECIFIC FILES ###
 API_KEYS.json
+EMAIL.json
