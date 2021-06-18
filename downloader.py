@@ -15,35 +15,15 @@ import googleapiclient.discovery
 import youtube_dl
 import subprocess
 import operator
+import smtplib, ssl
 from os import error, name
-from datetime import datetime
+from datetime import datetime, timedelta
 from pytz import timezone, utc
 from bs4 import BeautifulSoup
 from types import SimpleNamespace
 
-HOLOMEM_EN_NAMES = ['AZKi', 'Akai Haato', 'Usada Pekora', 'Minato Aqua', 'Yuzuki Choco', 'Tokoyami Towa', 'Hoshimachi Suisei', 
-                    'Hanasaki Miyabi', 'Anya Melfissa', 'Nakiri Ayame', 'Rikkaroid', 'Himemori Luna', 'Yukoku Roberu', 'Airani Iofifteen', 
-                    'Momosuzu Nene', 'Houshou Marine', 'Yozora Mel', 'Shirakami Fubuki', 'Roboco-san', 'Shirogane Noel', 'Kagami Kira', 
-                    'Yukihana Lamy', 'Hololive Indonesia', 'Aki Rosenthal', 'Kishido Temma', 'Civia', 'Mano Aloe', 'Inugami Korone', 
-                    'Pavolia Reine', 'Akai Haato (Sub)', 'Sakura Miko', 'Kageyama Shien', 'Takanashi Kiara', 'Hololive VTuber Group', 
-                    'Omaru Polka', 'Arurandeisu', 'Aki Rosenthal (Sub)', 'Uruha Rushia', 'Mori Calliope', 'Ninomae Ina’nis', 'Astel Leda', 
-                    'Gawr Gura', 'Hololive English', 'Ayunda Risu', 'Moona Hoshinova', 'Choco Sub Channel', 'Ookami Mio', 'Tokino Sora', 
-                    'Natsuiro Matsuri', 'Tsunomaki Watame', 'Kiryu Coco', 'Tsukishita Kaoru', 'Shishiro Botan', 'Nekomata Okayu', 'Shiranui Flare', 
-                    'Oozora Subaru', 'Aragami Oga', 'Holostars Official', 'Murasaki Shion', 'Watson Amelia', 'Kureiji Ollie', 'Kanade Izuru', 'Amane Kanata']
 
 MASTER_LIVE_URL = "https://www.youtube.com/channel/{}/live"
-
-# Channel IDs
-MIO_ID = "UCp-5t9SrOQwXMU7iIjQfARg"
-FUBUKI_ID = "UCdn5BQ06XqgXoAxIhbqw5Rg"
-COCO_ID = "UCS9uQI-jC3DE0L4IpXyvr6w"
-INA_ID = "UCMwGHR0BTZuLsmjY_NT5Pwg"
-RURUFU_ID = "UCcQsDietWkYakBKbGpCaeLA"
-BOTAN_ID = "UCUKD-uaobj9jiqB-VXt71mA"
-ROBERU_ID = "UCANDOlYTJT7N5jlRC3zfzVA"
-KIARA_ID = "UCHsx4Hqa-1ORjQTh9TYDhww"
-LAMY_ID = "UCFKOVgVbGmX65RxO3EtH3iw"
-NOEL_ID = "UCdyqAaZDKHXg4Ahi7VENThQ"
 
 
 class YTDLLogger(object):
@@ -55,6 +35,12 @@ class YTDLLogger(object):
 
     def error(self, msg):
         print(msg)
+
+
+def datetime_from_utc_to_local(utc_datetime):
+    now_timestamp = time.time()
+    offset = datetime.fromtimestamp(now_timestamp) - datetime.utcfromtimestamp(now_timestamp)
+    return utc_datetime + offset
 
 
 def jprint(obj):
@@ -87,12 +73,14 @@ def runYTDL(ID, path):
         try:
             ydl.download(['https://www.youtube.com/watch?v={}'.format(ID)])
         except Exception as e:
-            print(e)
+            print("ERROR: {}".format(e))
             return False
     return True
 
 
-def generic_search(youtube_api_key):
+def generic_search(channel_id, youtube_api_key, email_config):
+    # TODO: Generic search doesn't support multiple videos, try to fix that
+
     streams_to_archive = []
 
     running = 1
@@ -101,7 +89,7 @@ def generic_search(youtube_api_key):
         # Live parsing
         try:
             # Get soup
-            page = requests.get(MASTER_LIVE_URL.format(RURUFU_ID))
+            page = requests.get(MASTER_LIVE_URL.format(channel_id))
             soup = BeautifulSoup(page.content, 'html.parser')
 
             # Scrape page
@@ -113,10 +101,10 @@ def generic_search(youtube_api_key):
             # Begin parsing JSON and get live info if it exists
             data = json.loads(relevant_json)
             video_id = data["contents"]["twoColumnWatchNextResults"]["results"]["results"]["contents"][0]["videoPrimaryInfoRenderer"]["updatedMetadataEndpoint"]["updatedMetadataEndpoint"]["videoId"]
-            print("\nFound: {}".format(video_id))
+            # print("\nFound: {}".format(video_id))
 
             # YouTube API call from found video_id
-            os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+            # os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
             DEVELOPER_KEY = youtube_api_key
             api_service_name = "youtube"
             api_version = "v3"
@@ -134,19 +122,54 @@ def generic_search(youtube_api_key):
             # jprint(video)
             scheduled_start_time = video["liveStreamingDetails"]["scheduledStartTime"]
             live_broadcast_content = video["snippet"]["liveBroadcastContent"]
+            video_title =  video["snippet"]["title"]
+            channel_name = video["snippet"]["channelTitle"]
+
+            print("\nFound stream: {} - {}".format(video_title, video_id), end="")
 
             if live_broadcast_content in ("upcoming", "live"):
-                if len(streams_to_archive) == 0:
-                    stream = (video_id, scheduled_start_time)
-                    # print(stream)
-                    streams_to_archive.append(stream)
-                    running = 0
-                    return streams_to_archive
+                stream = (video_id, scheduled_start_time)
+                streams_to_archive.append(stream)
+
+                if email_config is not False:
+                    # Convert time
+                    format = "%H:%M:%S"
+                    tmptime = iso8601.parse_date(scheduled_start_time)
+                    local_time = datetime_from_utc_to_local(tmptime)
+                    time_delta = timedelta(minutes=15)
+                    alarm_time = local_time - time_delta
+
+                    # Setup email
+                    port = 465  # For SSL
+                    smtp_server = "smtp.gmail.com"
+                    sender_email = email_config['sender_email']
+                    receiver_email = email_config['receiver_email']
+                    password = email_config['password']
+                    # TODO: Message embed doesn't like Japanese characters (coming from channel title), fix this
+                    message = 'Subject: {},{}\n\n[{}][{}]'.format(
+                        alarm_time.hour,
+                        alarm_time.minute,
+                        channel_name,
+                        local_time.strftime(format)
+                    )
+
+                    # Send email
+                    context = ssl.create_default_context()
+                    with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
+                        server.login(sender_email, password)
+                        server.sendmail(sender_email, receiver_email, message.encode('utf-8'))
+
         except Exception as e:
-            print("\n{}".format(e))
+            print("ERROR: {}".format(e))
 
-        time.sleep(10)
-
+        if len(streams_to_archive) > 0:
+            running = 0
+        else:
+            time.sleep(60)
+    # print(streams_to_archive)
+    # Keep terminal pretty
+    print("")
+    return streams_to_archive
 
 def sort_by_time(stream_list):
     # Master timestamp
@@ -164,7 +187,7 @@ def sort_by_time(stream_list):
 
     # Sort dict
     temp_sorted = dict(sorted(temp.items(), key=lambda item: item[1]))
-    
+
     # Reconstruct dictionary and return
     final_list = []
     final_keys = temp_sorted.keys()
@@ -173,7 +196,7 @@ def sort_by_time(stream_list):
     return final_list
 
 
-def search_for_streams(api_params, holodex_api_key):
+def search_for_streams(api_params, holodex_api_key, email_config):
     streams_to_archive = []
 
     running = 1
@@ -192,23 +215,48 @@ def search_for_streams(api_params, holodex_api_key):
                 if not re.search(r'\bfree chat\b', video["title"], re.I):
                     # Keep terminal pretty
                     print("\nFound stream: {} - {}".format(video["title"], video["id"]), end="")
-                    if video["status"] == "upcoming" or video["status"] == "live":
-                        # if len(streams_to_archive) == 0:
-                            stream = (video["id"], video["start_scheduled"])
-                            streams_to_archive.append(stream)
+                    if video["status"] in ("upcoming", "live"):
+                        stream = (video["id"], video["start_scheduled"])
+                        streams_to_archive.append(stream)
+
+                        if email_config is not False:
+                            # Convert time
+                            format = "%H:%M:%S"
+                            tmptime = iso8601.parse_date(video["start_scheduled"])
+                            local_time = datetime_from_utc_to_local(tmptime)
+                            time_delta = timedelta(minutes=15)
+                            alarm_time = local_time - time_delta
+
+                            # Setup email
+                            port = 465  # For SSL
+                            smtp_server = "smtp.gmail.com"
+                            sender_email = email_config['sender_email']
+                            receiver_email = email_config['receiver_email']
+                            password = email_config['password']
+                            message = 'Subject: {},{}\n\n[{}][{}]'.format(
+                                alarm_time.hour,
+                                alarm_time.minute,
+                                video["channel"]["english_name"],
+                                local_time.strftime(format)
+                            )
+
+                            # Send email
+                            context = ssl.create_default_context()
+                            with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
+                                server.login(sender_email, password)
+                                server.sendmail(sender_email, receiver_email, message)
 
         if len(streams_to_archive) > 0:
             running = 0
         else:
             time.sleep(60)
     # print(streams_to_archive)
+    # Keep terminal pretty
+    print("")
     return streams_to_archive
 
 
 def archive_streams(stream_list, path):
-    # Keep terminal pretty
-    print("")
-
     # TODO: Add template arguments to default path
     if path == None:
         path = "./"
@@ -224,7 +272,7 @@ def archive_streams(stream_list, path):
                 utcmoment = utcmoment_naive.replace(tzinfo=pytz.utc)
                 difference = start_date - utcmoment
                 seconds_remaining = difference.total_seconds()
-                print("\rTime until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]), end='')
+                print("\rTime until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]), end="")
                 # seconds_remaining = -10
                 if seconds_remaining < (60*5):
                     if runYTDL(stream[0], path):
@@ -234,13 +282,14 @@ def archive_streams(stream_list, path):
                         print("ytdl failed")
                 else:
                     time.sleep(1)
-        running = 0       
+        running = 0
 
 
 def parse_command_line(channels):
     arguments = dict()
     parser = argparse.ArgumentParser(description='Python script for monitoring a VTuber\'s channel and automatically downloading videos when they go live.')
-    parser.add_argument('-o', '--output', help='File path output for youtube-dl')    
+    parser.add_argument('-o', '--output', help='File path output for youtube-dl')
+    parser.add_argument('-e', '--email', help='Enable email mode', action='store_true')
     required_args = parser.add_argument_group('required arguments')
     required_args.add_argument('-c', '--channel', help='VTuber\'s English first name, case insensitive. (ex: Mio, Fubuki, etc.)', required=True)
 
@@ -254,13 +303,15 @@ def parse_command_line(channels):
     else:
         arguments['output'] = None
 
+    arguments['email'] = args['email']
+
     input_val = args['channel'].lower()
-    if input_val in channels["holodex_supported"].keys():
-        arguments['channel_id'] = channels["holodex_supported"][input_val]
-    elif input_val in channels["youtube_only"].keys():
-        arguments['channel_id'] = channels["youtube_only"][input_val]
+    if input_val in channels['holodex_supported'].keys():
+        arguments['channel_id'] = channels['holodex_supported'][input_val]
+    elif input_val in channels['youtube_only'].keys():
+        arguments['channel_id'] = channels['youtube_only'][input_val]
     else:
-        print('chuubas.py -c <English channel name>')
+        print("chuubas.py -c <English channel name>")
         sys.exit(2)
 
     return arguments
@@ -277,6 +328,8 @@ def main(argv):
     # TODO: Add handling for members-only videos (command line flag with yt-dl config)
     # TODO: Move to config files for yt-dl ***(NOT POSSIBLE)
     # TODO: Figure out why yt-dl doesn't actually download thumbnail, desc., etc.; only grabbing video stream atm
+    # TODO: Multi threading to free up thread to keep checking for videos
+    # TODO: Fix DST handling
 
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -297,6 +350,15 @@ def main(argv):
     arguments = parse_command_line(channel_ids)
     channel_id = arguments['channel_id']
     output_path = arguments['output']
+    email_config = arguments['email'] 
+
+    if arguments['email'] is True:
+        try:
+            with open('EMAIL.json') as f:
+                email_config = json.load(f)
+        except Exception as e:
+            print("Error reading email config...does it exist? Are you running inside project directory?")
+            sys.exit(2)
 
     print("======< The sun never sets on the VTuber Empire >======")
 
@@ -307,12 +369,12 @@ def main(argv):
     # TODO: Redundany check on supported channel list, try to only handle this in arg parser
     if channel_id in channel_ids["holodex_supported"].values():
         while (True):
-            stream_list = search_for_streams(single_user_live_params, api_keys['Holodex'])
+            stream_list = search_for_streams(single_user_live_params, api_keys['Holodex'], email_config)
             # stream_list = [('xH5k29Boh7c', '2021-06-11T13:00:00.000Z')]
             archive_streams(stream_list, output_path)
-    elif channel_id == channel_ids["youtube_only"].values():
+    elif channel_id in channel_ids["youtube_only"].values():
         while(True):
-            stream_list = generic_search(api_keys['YouTube'])
+            stream_list = generic_search(channel_id, api_keys['YouTube'], email_config)
             # stream = [('Yon4aCYJVhw', '2021-06-11T13:00:00.000Z')]
             archive_streams(stream_list, output_path)
     else:

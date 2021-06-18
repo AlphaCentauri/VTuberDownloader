@@ -1,0 +1,5 @@
+{
+    "sender_email" = "<ENTER SENDER EMAIL ADDRESS>",
+    "receiver_email" = "<ENTER RECIEVER EMAIL ADDRESS>",
+    "password" = "<ENTER EMAIL PASSWORD>"
+}
