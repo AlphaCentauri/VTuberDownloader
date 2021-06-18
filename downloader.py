@@ -149,7 +149,7 @@ def generic_search(channel_id, youtube_api_key, email_config):
                     message = 'Subject: {},{}\n\n[{}][{}]'.format(
                         alarm_time.hour,
                         alarm_time.minute,
-                        "Rurufu",
+                        channel_name,
                         local_time.strftime(format)
                     )
 
@@ -157,7 +157,7 @@ def generic_search(channel_id, youtube_api_key, email_config):
                     context = ssl.create_default_context()
                     with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
                         server.login(sender_email, password)
-                        server.sendmail(sender_email, receiver_email, message)
+                        server.sendmail(sender_email, receiver_email, message.encode('utf-8'))
 
         except Exception as e:
             print("ERROR: {}".format(e))
