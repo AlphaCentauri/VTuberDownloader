@@ -16,6 +16,7 @@ import youtube_dl
 import subprocess
 import operator
 import smtplib, ssl
+import multiprocessing
 from os import error, name
 from datetime import datetime, timedelta
 from pytz import timezone, utc
@@ -255,6 +256,59 @@ def search_for_streams(api_params, holodex_api_key, email_config):
     return streams_to_archive
 
 
+def search_for_streams_p(api_params, holodex_api_key, email_config, stream_archive):
+    streams_to_archive = []
+        
+    users_live = requests.get("https://holodex.net/api/v2/users/live", params=api_params, headers={"X-APIKEY":holodex_api_key}).json()
+    # jprint(users_live)
+
+    if len(users_live) > 0:
+        # Sort stream list
+        users_live = sort_by_time(users_live)
+
+        # Parse stream list
+        for video in users_live:
+            # TODO: This will not catch all free chat titles, maybe default to checking start_scheduled time and if it's stupid huge, ignore stream
+            if not re.search(r'\bfree\b', video['title'], re.I) and video['status'] in ("upcoming", "live") and video['id'] not in stream_archive:
+                # Keep terminal pretty
+                print("\nFound stream: {} - {}".format(video['title'], video['id']), end="")
+                # print("\nFound stream: {} - {}".format(video['title'], video['id']))
+                stream = (video['id'], video['start_scheduled'])
+                streams_to_archive.append(stream)
+
+                if email_config is not False:
+                    # Convert time
+                    format = "%H:%M:%S"
+                    tmptime = iso8601.parse_date(video['start_scheduled'])
+                    local_time = datetime_from_utc_to_local(tmptime)
+                    time_delta = timedelta(minutes=15)
+                    alarm_time = local_time - time_delta
+
+                    # Setup email
+                    port = 465  # For SSL
+                    smtp_server = "smtp.gmail.com"
+                    sender_email = email_config['sender_email']
+                    receiver_email = email_config['receiver_email']
+                    password = email_config['password']
+                    message = 'Subject: {},{}\n\n[{}][{}]'.format(
+                        alarm_time.hour,
+                        alarm_time.minute,
+                        video['channel']['english_name'],
+                        local_time.strftime(format)
+                    )
+
+                    # Send email
+                    context = ssl.create_default_context()
+                    with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
+                        server.login(sender_email, password)
+                        server.sendmail(sender_email, receiver_email, message)
+    
+    # print(streams_to_archive)
+    # Keep terminal pretty
+    # print("")
+    return streams_to_archive
+
+
 def archive_streams(stream_list, path):
     if path == None:
         path = "./[%(upload_date)s][%(id)s] %(title)s/[%(uploader)s] %(title)s.%(ext)s"
@@ -281,6 +335,29 @@ def archive_streams(stream_list, path):
                 else:
                     time.sleep(1)
         running = 0
+
+
+def archive_streams_p(stream, path):
+    if path == None:
+        path = "./[%(upload_date)s][%(id)s] %(title)s/[%(uploader)s] %(title)s.%(ext)s"
+
+    running = 1
+    while(running):
+        start_date = iso8601.parse_date(stream[1])
+        utcmoment_naive = datetime.utcnow()
+        utcmoment = utcmoment_naive.replace(tzinfo=pytz.utc)
+        difference = start_date - utcmoment
+        seconds_remaining = difference.total_seconds()
+        print("\nTime until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]), end="")
+        # seconds_remaining = -10
+        if seconds_remaining < (60*2):
+            if runYTDL(stream[0], path):
+                print("ytdl passed")
+                running = 0
+            else:
+                print("ytdl failed")
+        else:
+            time.sleep(1)
 
 
 def parse_command_line(channels):
@@ -363,10 +440,19 @@ def main(argv):
 
     # TODO: Redundany check on supported channel list, try to only handle this in arg parser
     if channel_id in channel_ids["holodex_supported"].values():
+        stream_archive = []
+        # TODO: Print this only once for now until I can build an actual CLI
+        print("\rSearching...", end='')
         while (True):
-            stream_list = search_for_streams(single_user_live_params, api_keys['Holodex'], email_config)
+            stream_list = search_for_streams_p(single_user_live_params, api_keys['Holodex'], email_config, stream_archive)
             # stream_list = [('xH5k29Boh7c', '2021-06-11T13:00:00.000Z')]
-            archive_streams(stream_list, output_path)
+            for stream in stream_list:
+                if stream[0] not in stream_archive:
+                    stream_archive.append(stream[0])
+                    archive_p = multiprocessing.Process(target=archive_streams_p, args=(stream, output_path))
+                    archive_p.start()
+                # archive_streams(stream, output_path)
+            time.sleep(60)
     elif channel_id in channel_ids["youtube_only"].values():
         while(True):
             stream_list = generic_search(channel_id, api_keys['YouTube'], email_config)
