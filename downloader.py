@@ -145,7 +145,6 @@ def generic_search(channel_id, youtube_api_key, email_config):
                     sender_email = email_config['sender_email']
                     receiver_email = email_config['receiver_email']
                     password = email_config['password']
-                    # TODO: Message embed doesn't like Japanese characters (coming from channel title), fix this
                     message = 'Subject: {},{}\n\n[{}][{}]'.format(
                         alarm_time.hour,
                         alarm_time.minute,
@@ -257,9 +256,8 @@ def search_for_streams(api_params, holodex_api_key, email_config):
 
 
 def archive_streams(stream_list, path):
-    # TODO: Add template arguments to default path
     if path == None:
-        path = "./"
+        path = "./[%(upload_date)s][%(id)s] %(title)s/[%(uploader)s] %(title)s.%(ext)s"
 
     running = 1
     while(running):
@@ -296,7 +294,7 @@ def parse_command_line(channels):
     args = vars(parser.parse_args())
 
     if args['channel'] == None:
-        print('chuubas.py -c <English channel name>')
+        print('downloader.py -c <English channel name>')
         sys.exit(2)
     if args['output'] is not None:
         arguments['output'] = args['output']
@@ -311,7 +309,7 @@ def parse_command_line(channels):
     elif input_val in channels['youtube_only'].keys():
         arguments['channel_id'] = channels['youtube_only'][input_val]
     else:
-        print("chuubas.py -c <English channel name>")
+        print("downloader.py -c <English channel name>")
         sys.exit(2)
 
     return arguments
@@ -323,13 +321,10 @@ def signal_handler(sig, frame):
 
 
 def main(argv):
-    # TODO: Add support for several videos ***(DONE)
-    # TODO: Sort videos by time and start with video with shortest remaining time to start ***(DONE)
     # TODO: Add handling for members-only videos (command line flag with yt-dl config)
     # TODO: Move to config files for yt-dl ***(NOT POSSIBLE)
     # TODO: Figure out why yt-dl doesn't actually download thumbnail, desc., etc.; only grabbing video stream atm
     # TODO: Multi threading to free up thread to keep checking for videos
-    # TODO: Fix DST handling
 
     signal.signal(signal.SIGINT, signal_handler)
 
