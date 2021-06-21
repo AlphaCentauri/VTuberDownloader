@@ -1,4 +1,6 @@
 from __future__ import unicode_literals
+import curses
+import npyscreen
 import getopt
 import sys
 import signal
@@ -375,5 +377,83 @@ def main(argv):
         sys.exit('INVALID CHANNEL ID!')
 
 
+#test screen resize
+def main_screen():
+    VERSION = "0.1-dev" #version number
+    # Setup Curses 
+    screen = curses.initscr() #initialize the curses window
+
+    #Configure color pairs for showing select menu options as highlighted
+    curses.start_color() #enable color for highlighting menu options
+    curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE) #color pair 1
+    highlightText = curses.color_pair(1) #color pair for highlighted menu option
+    normalText = curses.A_NORMAL #color pair for non-highlighted menu options
+
+    #Configure global variables for Curses
+    curses.noecho() #disable the keypress echo to prevent double input
+    curses.cbreak() #disable line buffers to run the keypress immediately
+    curses.curs_set(0)
+    screen.keypad(1) #enable keyboard use
+    screen.addstr(2, 2, "Screen Resize Test" + VERSION, curses.A_UNDERLINE)
+
+    # Create windows
+    title = curses.newwin(2, int(curses.COLS), 0, 0)
+    selection = curses.newwin(int(curses.LINES - 1), int(curses.COLS / 2), 3, 1)
+    display = curses.newwin(int(curses.LINES - 1), int(curses.COLS / 2), 3, int(curses.COLS / 2))
+
+    title.border(0)
+    selection.border(0)
+    display.border(0)
+    title.refresh()
+    # selection.refresh()
+    # display.refresh()
+    x = screen.getch()
+
+    escape = False
+    while escape == False:
+        maxY, maxX = screen.getmaxyx()
+        # screen.border('|', '|', '-', '-', '+', '+', '+', '+')
+        screen.border()
+        screen.addstr(4, 2, "MaxY: " + str(maxY))
+        screen.addstr(5, 2, "MaxX: " + str(maxX))
+
+        x = screen.getch()
+
+        if x == ord("q"):
+            escape = True
+            curses.endwin()
+        elif x == curses.KEY_RESIZE:
+            screen.erase()
+            screen.addstr(2, 2, "Screen Resize Test" + VERSION, curses.A_UNDERLINE)
+
+
+class TestApp(npyscreen.NPSApp):
+    def main(self):
+        # These lines create the form and populate it with widgets.
+        # A fairly complex screen in only 8 or so lines of code - a line for each control.
+        F  = npyscreen.Form(name = "< The sun never sets on the VTuber Empire >",)
+        t  = F.add(npyscreen.TitleText, name = "Text:",)
+        fn = F.add(npyscreen.TitleFilename, name = "Filename:")
+        fn2 = F.add(npyscreen.TitleFilenameCombo, name="Filename2:")
+        dt = F.add(npyscreen.TitleDateCombo, name = "Date:")
+        s  = F.add(npyscreen.TitleSlider, out_of=12, name = "Slider")
+        ml = F.add(npyscreen.MultiLineEdit,
+               value = """try typing here!\nMutiline text, press ^R to reformat.\n""",
+               max_height=5, rely=9)
+        ms = F.add(npyscreen.TitleSelectOne, max_height=4, value = [1,], name="Pick One",
+                values = ["Option1","Option2","Option3"], scroll_exit=True)
+        ms2= F.add(npyscreen.TitleMultiSelect, max_height =-2, value = [1,], name="Pick Several",
+                values = ["Option1","Option2","Option3"], scroll_exit=True)
+
+        # This lets the user interact with the Form.
+        F.edit()
+
+        print(ms.get_selected_objects())
+
+
+
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    # main(sys.argv[1:])
+    # main_screen()
+    App = TestApp()
+    App.run()
