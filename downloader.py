@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 from __future__ import unicode_literals
-import getopt
 import sys
 import signal
 import requests
@@ -10,18 +9,14 @@ import iso8601
 import time
 import pytz
 import argparse
-import os
 import googleapiclient.discovery
 import youtube_dl
-import subprocess
-import operator
 import smtplib, ssl
 import multiprocessing
 from os import error, name
 from datetime import datetime, timedelta
 from pytz import timezone, utc
 from bs4 import BeautifulSoup
-from types import SimpleNamespace
 
 
 MASTER_LIVE_URL = "https://www.youtube.com/channel/{}/live"
@@ -35,7 +30,9 @@ class YTDLLogger(object):
         pass
 
     def error(self, msg):
-        print(msg)
+        # print(msg)
+        # return msg
+        pass
 
 
 def datetime_from_utc_to_local(utc_datetime):
@@ -77,19 +74,20 @@ def runYTDL(ID, path):
         try:
             ydl.download(['https://www.youtube.com/watch?v={}'.format(ID)])
         except Exception as e:
-            print("ERROR: {}".format(e))
+            print("{}".format(e))
             return False
     return True
 
 
-def generic_search(channel_id, youtube_api_key, email_config):
+def generic_search(channel_id, youtube_api_key, email_config, stream_archive):
     # TODO: Generic search doesn't support multiple videos, try to fix that
+    # TODO: See what it would take to switch to YouTube API only
 
     streams_to_archive = []
 
     running = 1
     while(running):
-        print("\rSearching...", end='')
+        # print("\rSearching...", end='')
         # Live parsing
         try:
             # Get soup
@@ -129,9 +127,13 @@ def generic_search(channel_id, youtube_api_key, email_config):
             video_title =  video["snippet"]["title"]
             channel_name = video["snippet"]["channelTitle"]
 
-            print("\nFound stream: {} - {}".format(video_title, video_id), end="")
+            # print("Video id found: {}".format(video_id))
+            # print("Current stream archive: {}".format(stream_archive))
+            # print("Title: {}".format(video_title))
 
-            if live_broadcast_content in ("upcoming", "live"):
+            # if not re.search(r'\bfree\b', video_title, re.I) and not re.search(r'\bスケジュール\b', video_title, re.I) and live_broadcast_content in ("upcoming", "live") and video_id not in stream_archive:
+            if not re.search(r'\bfree\b', video_title, re.I) and not re.search(r'\bスケジュール\b', video_title, re.I) and live_broadcast_content in ("upcoming", "live") and video_id not in stream_archive:
+                print("Found stream: {} - {}".format(video_title, video_id), end="")
                 stream = (video_id, scheduled_start_time)
                 streams_to_archive.append(stream)
 
@@ -174,6 +176,7 @@ def generic_search(channel_id, youtube_api_key, email_config):
     print("")
     return streams_to_archive
 
+
 def sort_by_time(stream_list):
     # Master timestamp
     utcmoment_naive = datetime.utcnow()
@@ -204,7 +207,7 @@ def search_for_streams(api_params, holodex_api_key, email_config):
 
     running = 1
     while(running):
-        print("\rSearching...", end='')
+        # print("\rSearching...", end='')
         users_live = requests.get("https://holodex.net/api/v2/users/live", params=api_params, headers={"X-APIKEY":holodex_api_key}).json()
         # jprint(users_live)
 
@@ -217,7 +220,7 @@ def search_for_streams(api_params, holodex_api_key, email_config):
                 # TODO: This will not catch all free chat titles, maybe default to checking start_scheduled time and if it's stupid huge, ignore stream
                 if not re.search(r'\bfree chat\b', video["title"], re.I):
                     # Keep terminal pretty
-                    print("\nFound stream: {} - {}".format(video["title"], video["id"]), end="")
+                    print("Found stream: {} - {}".format(video["title"], video["id"]), end="")
                     if video["status"] in ("upcoming", "live"):
                         stream = (video["id"], video["start_scheduled"])
                         streams_to_archive.append(stream)
@@ -274,7 +277,7 @@ def search_for_streams_p(api_params, holodex_api_key, email_config, stream_archi
             # TODO: This will not catch all free chat titles, maybe default to checking start_scheduled time and if it's stupid huge, ignore stream
             if not re.search(r'\bfree\b', video['title'], re.I) and video['status'] in ("upcoming", "live") and video['id'] not in stream_archive:
                 # Keep terminal pretty
-                print("\nFound stream: {} - {}".format(video['title'], video['id']), end="")
+                print("Found stream: {} - {}".format(video['title'], video['id']))
                 # print("\nFound stream: {} - {}".format(video['title'], video['id']))
                 stream = (video['id'], video['start_scheduled'])
                 streams_to_archive.append(stream)
@@ -312,7 +315,7 @@ def search_for_streams_p(api_params, holodex_api_key, email_config, stream_archi
     return streams_to_archive
 
 
-def archive_streams(stream_list, path):
+def archive_streams(stream_list, path, stream_archive):
     if path == None:
         path = "./[%(upload_date)s][%(id)s] %(title)s/[%(uploader)s] %(title)s.%(ext)s"
 
@@ -327,16 +330,15 @@ def archive_streams(stream_list, path):
                 utcmoment = utcmoment_naive.replace(tzinfo=pytz.utc)
                 difference = start_date - utcmoment
                 seconds_remaining = difference.total_seconds()
-                print("\rTime until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]), end="")
+                print("\rTime until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]))
                 # seconds_remaining = -10
                 if seconds_remaining < (60*5):
                     if runYTDL(stream[0], path):
-                        print("ytdl passed")
                         run_inner = 0
                     else:
-                        print("ytdl failed")
+                        time.sleep(1)
                 else:
-                    time.sleep(1)
+                    time.sleep(60)
         running = 0
 
 
@@ -351,14 +353,13 @@ def archive_streams_p(stream, path):
         utcmoment = utcmoment_naive.replace(tzinfo=pytz.utc)
         difference = start_date - utcmoment
         seconds_remaining = difference.total_seconds()
-        print("\nTime until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]), end="")
-        # seconds_remaining = -10
+        print("Time until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]))
+        # seconds_remaining = 67
         if seconds_remaining < (60*2):
             if runYTDL(stream[0], path):
-                print("ytdl passed")
                 running = 0
-            else:
-                print("ytdl failed")
+            if seconds_remaining > 60:
+                time.sleep(1)
         else:
             time.sleep(1)
 
@@ -396,7 +397,7 @@ def parse_command_line(channels):
 
 
 def signal_handler(sig, frame):
-    print('\nGoodbye.')
+    print('Goodbye.')
     sys.exit(0)
 
 
@@ -405,6 +406,7 @@ def main(argv):
     # TODO: Move to config files for yt-dl ***(NOT POSSIBLE)
     # TODO: Figure out why yt-dl doesn't actually download thumbnail, desc., etc.; only grabbing video stream atm
     # TODO: Multi threading to free up thread to keep checking for videos
+    # TODO: Handle recovering streams that premptively end and/or restart streaming on same frame
 
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -445,22 +447,31 @@ def main(argv):
     if channel_id in channel_ids["holodex_supported"].values():
         stream_archive = []
         # TODO: Print this only once for now until I can build an actual CLI
-        print("\rSearching...", end='')
+        # print("Using {} as the API key for Holotools.".format(api_keys['Holodex']))
+        # print("\rSearching...", end='')
         while (True):
             stream_list = search_for_streams_p(single_user_live_params, api_keys['Holodex'], email_config, stream_archive)
-            # stream_list = [('xH5k29Boh7c', '2021-06-11T13:00:00.000Z')]
+            # stream_list = [('pcEqaCU4_SU', '2021-07-30T03:05:00.000Z')]
+            # archive_streams(stream, output_path)
             for stream in stream_list:
                 if stream[0] not in stream_archive:
                     stream_archive.append(stream[0])
                     archive_p = multiprocessing.Process(target=archive_streams_p, args=(stream, output_path))
                     archive_p.start()
-                # archive_streams(stream, output_path)
             time.sleep(60)
     elif channel_id in channel_ids["youtube_only"].values():
+        stream_archive = []
         while(True):
-            stream_list = generic_search(channel_id, api_keys['YouTube'], email_config)
+            stream_list = generic_search(channel_id, api_keys['YouTube'], email_config, stream_archive)
             # stream = [('Yon4aCYJVhw', '2021-06-11T13:00:00.000Z')]
-            archive_streams(stream_list, output_path)
+            # stream_archive.append(stream_list[0])
+            # archive_streams(stream_list, output_path, stream_archive)
+            for stream in stream_list:
+                if stream[0] not in stream_archive:
+                    stream_archive.append(stream[0])
+                    archive_p = multiprocessing.Process(target=archive_streams_p, args=(stream, output_path))
+                    archive_p.start()
+            time.sleep(60)
     else:
         sys.exit('INVALID CHANNEL ID!')
 
