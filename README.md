@@ -9,6 +9,4 @@ Once obtained, place them inside `API_KEYS.TEMPLATE` and rename the file extensi
 Dependency installation: **TODO** (setup venv)
 
 # Usage
-`./downloader.py -c <vtuber's English name>`
-
-**TODO**: Need to fix youtube-dl configuration
+`./downloader.py -c <vtuber's English name (see supported list)> [-e]`
