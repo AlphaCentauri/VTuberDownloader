@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 from __future__ import unicode_literals
 import sys
 import signal
@@ -130,8 +131,7 @@ def generic_search(channel_id, youtube_api_key, email_config, stream_archive):
             # print("Current stream archive: {}".format(stream_archive))
             # print("Title: {}".format(video_title))
 
-            # if not re.search(r'\bfree\b', video_title, re.I) and not re.search(r'\bスケジュール\b', video_title, re.I) and live_broadcast_content in ("upcoming", "live") and video_id not in stream_archive:
-            if not re.search(r'\bfree\b', video_title, re.I) and not re.search(r'\bスケジュール\b', video_title, re.I) and live_broadcast_content in ("upcoming", "live") and video_id not in stream_archive:
+            if not re.search(r'\bfree\b', video_title, re.I) and not re.search(r'スケジュール', video_title, re.I) and live_broadcast_content in ("upcoming", "live") and video_id not in stream_archive:
                 print("Found stream: {} - {}".format(video_title, video_id), end="")
                 stream = (video_id, scheduled_start_time)
                 streams_to_archive.append(stream)
@@ -264,7 +264,15 @@ def search_for_streams(api_params, holodex_api_key, email_config):
 def search_for_streams_p(api_params, holodex_api_key, email_config, stream_archive):
     streams_to_archive = []
         
-    users_live = requests.get("https://holodex.net/api/v2/users/live", params=api_params, headers={"X-APIKEY":holodex_api_key}).json()
+    users_live_raw = requests.get("https://holodex.net/api/v2/users/live", params=api_params, headers={"X-APIKEY":holodex_api_key})
+    
+    # Split for bug fixing
+    try:
+        users_live = users_live_raw.json()
+    except Exception as e:
+        print("Code received: {}".format(users_live_raw.status_code))
+        print(e)
+        # sys.exit(2)
     # jprint(users_live)
 
     if len(users_live) > 0:
@@ -374,7 +382,7 @@ def parse_command_line(channels):
     args = vars(parser.parse_args())
 
     if args['channel'] == None:
-        print('downloader.py -c <English channel name>')
+        print('downloader.py -c <English channel name> [-e]')
         sys.exit(2)
     if args['output'] is not None:
         arguments['output'] = args['output']
@@ -389,7 +397,7 @@ def parse_command_line(channels):
     elif input_val in channels['youtube_only'].keys():
         arguments['channel_id'] = channels['youtube_only'][input_val]
     else:
-        print("downloader.py -c <English channel name>")
+        print("downloader.py -c <English channel name> [-e]")
         sys.exit(2)
 
     return arguments
@@ -406,6 +414,7 @@ def main(argv):
     # TODO: Figure out why yt-dl doesn't actually download thumbnail, desc., etc.; only grabbing video stream atm
     # TODO: Multi threading to free up thread to keep checking for videos
     # TODO: Handle recovering streams that premptively end and/or restart streaming on same frame
+    # TODO: Handle video going private before starting to avoid spamming download requests
 
     signal.signal(signal.SIGINT, signal_handler)
 
