@@ -150,11 +150,13 @@ def generic_search(channel_id, youtube_api_key, email_config, stream_archive):
                     sender_email = email_config['sender_email']
                     receiver_email = email_config['receiver_email']
                     password = email_config['password']
-                    message = 'Subject: {},{}\n\n[{}][{}]'.format(
+                    message = 'Subject: {},{}\n\n[{}][{}]\n{}\nhttps://www.youtube.com/watch?v={}'.format(
                         alarm_time.hour,
                         alarm_time.minute,
                         channel_name,
-                        local_time.strftime(format)
+                        local_time.strftime(format),
+                        video_title,
+                        video_id
                     )
 
                     # Send email
@@ -238,18 +240,20 @@ def search_for_streams(api_params, holodex_api_key, email_config):
                             sender_email = email_config['sender_email']
                             receiver_email = email_config['receiver_email']
                             password = email_config['password']
-                            message = 'Subject: {},{}\n\n[{}][{}]'.format(
+                            message = 'Subject: {},{}\n\n[{}][{}]\n{}\nhttps://www.youtube.com/watch?v={}'.format(
                                 alarm_time.hour,
                                 alarm_time.minute,
                                 video["channel"]["english_name"],
-                                local_time.strftime(format)
+                                local_time.strftime(format),
+                                video["title"],
+                                video["id"]
                             )
 
                             # Send email
                             context = ssl.create_default_context()
                             with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
                                 server.login(sender_email, password)
-                                server.sendmail(sender_email, receiver_email, message)
+                                server.sendmail(sender_email, receiver_email, message.encode("utf-8"))
 
         if len(streams_to_archive) > 0:
             running = 0
@@ -297,24 +301,27 @@ def search_for_streams_p(api_params, holodex_api_key, email_config, stream_archi
                     time_delta = timedelta(minutes=15)
                     alarm_time = local_time - time_delta
 
+                    print("help")
                     # Setup email
                     port = 465  # For SSL
                     smtp_server = "smtp.gmail.com"
                     sender_email = email_config['sender_email']
                     receiver_email = email_config['receiver_email']
                     password = email_config['password']
-                    message = 'Subject: {},{}\n\n[{}][{}]'.format(
+                    message = 'Subject: {},{}\n\n[{}][{}]\n{}\nhttps://www.youtube.com/watch?v={}'.format(
                         alarm_time.hour,
                         alarm_time.minute,
                         video['channel']['english_name'],
-                        local_time.strftime(format)
+                        local_time.strftime(format),
+                        video["title"],
+                        video["id"]
                     )
-
+                   
                     # Send email
                     context = ssl.create_default_context()
                     with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
                         server.login(sender_email, password)
-                        server.sendmail(sender_email, receiver_email, message)
+                        server.sendmail(sender_email, receiver_email, message.encode("utf-8"))
     
     # print(streams_to_archive)
     # Keep terminal pretty
@@ -337,7 +344,7 @@ def archive_streams(stream_list, path, stream_archive):
                 utcmoment = utcmoment_naive.replace(tzinfo=pytz.utc)
                 difference = start_date - utcmoment
                 seconds_remaining = difference.total_seconds()
-                print("\rTime until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]))
+                # print("\rTime until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]))
                 # seconds_remaining = -10
                 if seconds_remaining < (60*5):
                     if runYTDL(stream[0], path):
@@ -360,7 +367,7 @@ def archive_streams_p(stream, path):
         utcmoment = utcmoment_naive.replace(tzinfo=pytz.utc)
         difference = start_date - utcmoment
         seconds_remaining = difference.total_seconds()
-        print("Time until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]))
+        # print("Time until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]))
         # seconds_remaining = 67
         if seconds_remaining < (60*2):
             if runYTDL(stream[0], path):
@@ -415,6 +422,7 @@ def main(argv):
     # TODO: Multi threading to free up thread to keep checking for videos
     # TODO: Handle recovering streams that premptively end and/or restart streaming on same frame
     # TODO: Handle video going private before starting to avoid spamming download requests
+    # TODO: Add debug flags
 
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -463,6 +471,12 @@ def main(argv):
             # archive_streams(stream, output_path)
             for stream in stream_list:
                 if stream[0] not in stream_archive:
+                    start_date = iso8601.parse_date(stream[1])
+                    utcmoment_naive = datetime.utcnow()
+                    utcmoment = utcmoment_naive.replace(tzinfo=pytz.utc)
+                    difference = start_date - utcmoment
+                    print("Time until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]))
+
                     stream_archive.append(stream[0])
                     archive_p = multiprocessing.Process(target=archive_streams_p, args=(stream, output_path))
                     archive_p.start()
@@ -476,6 +490,12 @@ def main(argv):
             # archive_streams(stream_list, output_path, stream_archive)
             for stream in stream_list:
                 if stream[0] not in stream_archive:
+                    start_date = iso8601.parse_date(stream[1])
+                    utcmoment_naive = datetime.utcnow()
+                    utcmoment = utcmoment_naive.replace(tzinfo=pytz.utc)
+                    difference = start_date - utcmoment
+                    print("Time until ID={} begins: {}".format(stream[0], str(difference).split(".")[0]))
+
                     stream_archive.append(stream[0])
                     archive_p = multiprocessing.Process(target=archive_streams_p, args=(stream, output_path))
                     archive_p.start()
