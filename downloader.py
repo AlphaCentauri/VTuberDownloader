@@ -1,5 +1,10 @@
 #!/usr/bin/python3
 from __future__ import unicode_literals
+from requests.exceptions import HTTPError
+from os import error, name
+from datetime import datetime, timedelta
+from pytz import timezone, utc
+from bs4 import BeautifulSoup
 import sys
 import signal
 import requests
@@ -13,10 +18,6 @@ import googleapiclient.discovery
 import youtube_dl
 import smtplib, ssl
 import multiprocessing
-from os import error, name
-from datetime import datetime, timedelta
-from pytz import timezone, utc
-from bs4 import BeautifulSoup
 
 
 MASTER_LIVE_URL = "https://www.youtube.com/channel/{}/live"
@@ -268,64 +269,68 @@ def search_for_streams(api_params, holodex_api_key, email_config):
 def search_for_streams_p(api_params, holodex_api_key, email_config, stream_archive):
     streams_to_archive = []
         
-    users_live_raw = requests.get("https://holodex.net/api/v2/users/live", params=api_params, headers={"X-APIKEY":holodex_api_key})
-    
-    # Split for bug fixing
     try:
+        users_live_raw = requests.get("https://holodex.net/api/v2/users/live", params=api_params, headers={"X-APIKEY":holodex_api_key})
+        
+        users_live_raw.raise_for_status()
+
         users_live = users_live_raw.json()
-    except Exception as e:
-        print("Code received: {}".format(users_live_raw.status_code))
-        print(e)
-        # sys.exit(2)
-    # jprint(users_live)
 
-    if len(users_live) > 0:
-        # Sort stream list
-        users_live = sort_by_time(users_live)
+        if len(users_live) > 0:
+            # Sort stream list
+            users_live = sort_by_time(users_live)
 
-        # Parse stream list
-        for video in users_live:
-            # TODO: This will not catch all free chat titles, maybe default to checking start_scheduled time and if it's stupid huge, ignore stream
-            if not re.search(r'\bfree\b', video['title'], re.I) and video['status'] in ("upcoming", "live") and video['id'] not in stream_archive:
-                # Keep terminal pretty
-                print("Found stream: {} - {}".format(video['title'], video['id']))
-                # print("\nFound stream: {} - {}".format(video['title'], video['id']))
-                stream = (video['id'], video['start_scheduled'])
-                streams_to_archive.append(stream)
+            # Parse stream list
+            for video in users_live:
+                # TODO: This will not catch all free chat titles, maybe default to checking start_scheduled time and if it's stupid huge, ignore stream
+                if not re.search(r'\bfree\b', video['title'], re.I) and video['status'] in ("upcoming", "live") and video['id'] not in stream_archive:
+                    # Keep terminal pretty
+                    print("Found stream: {} - {}".format(video['title'], video['id']))
+                    # print("\nFound stream: {} - {}".format(video['title'], video['id']))
+                    stream = (video['id'], video['start_scheduled'])
+                    streams_to_archive.append(stream)
 
-                if email_config is not False:
-                    # Convert time
-                    format = "%H:%M:%S"
-                    tmptime = iso8601.parse_date(video['start_scheduled'])
-                    local_time = datetime_from_utc_to_local(tmptime)
-                    time_delta = timedelta(minutes=15)
-                    alarm_time = local_time - time_delta
+                    if email_config is not False:
+                        # Convert time
+                        format = "%H:%M:%S"
+                        tmptime = iso8601.parse_date(video['start_scheduled'])
+                        local_time = datetime_from_utc_to_local(tmptime)
+                        time_delta = timedelta(minutes=15)
+                        alarm_time = local_time - time_delta
 
-                    print("help")
-                    # Setup email
-                    port = 465  # For SSL
-                    smtp_server = "smtp.gmail.com"
-                    sender_email = email_config['sender_email']
-                    receiver_email = email_config['receiver_email']
-                    password = email_config['password']
-                    message = 'Subject: {},{}\n\n[{}][{}]\n{}\nhttps://www.youtube.com/watch?v={}'.format(
-                        alarm_time.hour,
-                        alarm_time.minute,
-                        video['channel']['english_name'],
-                        local_time.strftime(format),
-                        video["title"],
-                        video["id"]
-                    )
-                   
-                    # Send email
-                    context = ssl.create_default_context()
-                    with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
-                        server.login(sender_email, password)
-                        server.sendmail(sender_email, receiver_email, message.encode("utf-8"))
+                        # Setup email
+                        port = 465  # For SSL
+                        smtp_server = "smtp.gmail.com"
+                        sender_email = email_config['sender_email']
+                        receiver_email = email_config['receiver_email']
+                        password = email_config['password']
+                        message = 'Subject: {},{}\n\n[{}][{}]\n{}\nhttps://www.youtube.com/watch?v={}'.format(
+                            alarm_time.hour,
+                            alarm_time.minute,
+                            video['channel']['english_name'],
+                            local_time.strftime(format),
+                            video["title"],
+                            video["id"]
+                        )
+
+                        # Send email
+                        context = ssl.create_default_context()
+                        with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
+                            server.login(sender_email, password)
+                            server.sendmail(sender_email, receiver_email, message.encode("utf-8"))
     
-    # print(streams_to_archive)
-    # Keep terminal pretty
-    # print("")
+        # print(streams_to_archive)
+        # Keep terminal pretty
+        # print("")
+    except HTTPError as http_err:
+        print(f'HTTP error occurred: {http_err}')  # Python 3.6
+    except Exception as err:
+        print(f'Other error occurred: {err}')  # Python 3.6
+    # except Exception as e:
+    #     print("Code received: {}".format(users_live_raw.status_code))
+    #     print(e)
+    #     # sys.exit(2)
+
     return streams_to_archive
 
 
@@ -423,6 +428,8 @@ def main(argv):
     # TODO: Handle recovering streams that premptively end and/or restart streaming on same frame
     # TODO: Handle video going private before starting to avoid spamming download requests
     # TODO: Add debug flags
+    # TODO: Handle "ERROR: Private video" in generic search
+    # TODO: Handle case where video is caught under 15 mins to start
 
     signal.signal(signal.SIGINT, signal_handler)
 
