@@ -1,4 +1,3 @@
-#!/usr/bin/python
 from __future__ import unicode_literals
 from requests.exceptions import HTTPError
 from os import error, name
@@ -18,7 +17,7 @@ import time
 import pytz
 import argparse
 import googleapiclient.discovery
-import youtube_dl
+import yt_dlp
 import smtplib, ssl
 import multiprocessing
 
@@ -26,17 +25,23 @@ import multiprocessing
 MASTER_LIVE_URL = "https://www.youtube.com/channel/{}/live"
 
 
-class YTDLLogger(object):
+class YTDLLogger:
     def debug(self, msg):
+        # For compatibility with youtube-dl, both debug and info are passed into debug
+        # You can distinguish them by the prefix '[debug] '
+        if msg.startswith('[debug] '):
+            pass
+        else:
+            self.info(msg)
+
+    def info(self, msg):
         pass
 
     def warning(self, msg):
         pass
 
     def error(self, msg):
-        # print(msg)
-        # return msg
-        pass
+        print(msg)
 
 
 def datetime_from_utc_to_local(utc_datetime):
@@ -74,7 +79,7 @@ def runYTDL(ID, path):
         'progress_hooks': [my_hook],
     }
 
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             ydl.download(['https://www.youtube.com/watch?v={}'.format(ID)])
         except Exception as e:
