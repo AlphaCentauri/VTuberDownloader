@@ -83,7 +83,9 @@ def runYTDL(ID, path):
         try:
             ydl.download(['https://www.youtube.com/watch?v={}'.format(ID)])
         except Exception as e:
-            print("{}".format(e))
+            tz = timezone('US/Eastern')
+            current_time = datetime.now(tz)
+            print("[{}] {}".format(current_time, e))
             return False
     return True
 
