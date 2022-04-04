@@ -41,7 +41,9 @@ class YTDLLogger:
         pass
 
     def error(self, msg):
-        print(msg)
+        tz = timezone('US/Eastern')
+        current_time = datetime.now(tz)
+        print("[{}] {}".format(current_time, msg))
 
 
 def datetime_from_utc_to_local(utc_datetime):
@@ -83,9 +85,6 @@ def runYTDL(ID, path):
         try:
             ydl.download(['https://www.youtube.com/watch?v={}'.format(ID)])
         except Exception as e:
-            tz = timezone('US/Eastern')
-            current_time = datetime.now(tz)
-            print("[{}] {}".format(current_time, e))
             return False
     return True
 
