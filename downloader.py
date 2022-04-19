@@ -273,7 +273,7 @@ def search_holodex(api_params, holodex_api_key, email_config, stream_archive):
             # Parse stream list
             for video in users_live:
                 # TODO: This will not catch all free chat titles, maybe default to checking start_scheduled time and if it's stupid huge, ignore stream
-                if not re.search(r'\bfree\b', video['title'], re.I) and video['status'] in ("upcoming", "live") and video['id'] not in stream_archive and video['channel']['id'] != "UCnUhgh7rNaLnvmya--q0pCw":
+                if not re.search(r'\bfree\b', video['title'], re.I) and video['status'] in ("upcoming", "live") and video['id'] not in stream_archive and video['channel']['id'] != "UC6GKE9PDS2XvxRQO9nDikAQ" and video['channel']['id'] != "UCnUhgh7rNaLnvmya--q0pCw":
                     # Keep terminal pretty
                     print("Found stream: {} - {}".format(video['title'], video['id']))
                     # print("\nFound stream: {} - {}".format(video['title'], video['id']))
